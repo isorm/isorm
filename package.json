@@ -1,8 +1,8 @@
 {
   "name": "ten-stack-requires",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "",
-  "main": "index.js",
+  "main": "dist/app.js",
   "scripts": {
     "start": "concurrently --kill-others --names \"build,run\" -c \"yellow.bold,green.bold\" \"tsc -w\" \"nodemon -q -w dist src/app.ts\""
   },
