@@ -1,6 +1,6 @@
 {
   "name": "ten-stack-requires",
-  "version": "1.0.2",
+  "version": "1.0.15",
   "description": "",
   "main": "dist/app.js",
   "scripts": {
@@ -10,8 +10,9 @@
     "type": "git",
     "url": "git+https://github.com/mytls/ten-stack-requires.git"
   },
+  "types": "dist/ten-stack-requires.d.ts",
   "keywords": [],
-  "author": "",
+  "author": "mmdzov",
   "license": "ISC",
   "bugs": {
     "url": "https://github.com/mytls/ten-stack-requires/issues"
