@@ -46,17 +46,22 @@ export const _attacher = (handler: (...handlerProps: any) => any) => {
   return handler as () => {};
 };
 
-export const _needs = ({
+export const _needs = async ({
   app,
   router,
   middlewares,
+  playground,
 }: {
   app: Express;
   router: TRoute[];
+  playground?: () => void | Promise<void>;
   middlewares?: TMiddleware[];
 }) => {
-  middlewares?.map((middleware: TMiddleware) => app.use(_attacher(middleware)));
-  routes(app, router);
+  if (playground) await playground();
+  await middlewares?.map((middleware: TMiddleware) =>
+    app.use(_attacher(middleware))
+  );
+  await routes(app, router);
 };
 
 export const routes = (app: Express, routes: TRoute[]) =>
