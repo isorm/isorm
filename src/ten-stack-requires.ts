@@ -27,8 +27,8 @@ export interface IErrorParams {
   payload?: any;
 }
 
-export interface Next {
-  (err: IErrorParams): any;
+export interface Next<T> {
+  (response: T): any;
 }
 
 export type TRoute = { path: string; route: Router };
@@ -62,8 +62,8 @@ export const routes = (app: Express, routes: TRoute[]) =>
     return app.use(
       item.path,
       _attacher(item.route),
-      (err: IErrorParams, _req: Req<{}>, res: Response, _next: Next) => {
-        return res.json(err).status(err.status);
+      (err: any, _req: Req<{}>, res: Response, _next: Next<any>) => {
+        return res.json(err);
       }
     );
   });
