@@ -43,7 +43,7 @@ export type TAttach<T> = (
   req: Req<T>,
   res: Res<T>,
   next: NextFunction
-) => Response | NextFunction | void;
+) => Response | NextFunction | void | Promise<any>;
 
 export interface TPlaygroundCallbackParams {
   combine: (data: object) => void;
