@@ -352,3 +352,13 @@ export const Invoker = ({
 
   return APP;
 };
+
+export class InjectValidator {
+  validateBody?(value: any): any {
+    return null;
+  }
+
+  validateParam?(value: any): any {
+    return null;
+  }
+}
