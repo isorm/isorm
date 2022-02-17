@@ -14,6 +14,7 @@ export type RequestOption = Partial<{
   validator: new () => any;
 }>;
 
+type Methods = "get" | "post" | "put" | "patch" | "delete";
 type Middleware = (req: Request, res: Response, next: NextFunction) => any;
 declare global {
   var _$: {
@@ -28,7 +29,7 @@ declare global {
       key: string;
       path?: string;
       middlewares?: Middleware[];
-      method: "get" | "post" | "put" | "patch" | "delete";
+      method: Methods;
     }[];
   }[];
 }
@@ -199,7 +200,7 @@ function HandleRequestDecorator({
   options,
   path,
 }: {
-  method: "get" | "post" | "put" | "patch" | "delete";
+  method: Methods;
   options?: RequestOption;
   path: string;
 }) {
@@ -308,10 +309,7 @@ const validate =
       if (req?.params && validator?.validateParam)
         await validator?.validateParam(req?.params);
       const result = await validator?.validateBody(req?.body);
-      if (result?.body) {
-        // eslint-disable-next-line require-atomic-updates
-        req.body = result?.body;
-      }
+      if (result?.body) req.body = result?.body;
       return next();
     } catch (e) {
       return res.json(e);
