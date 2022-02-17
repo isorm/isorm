@@ -362,10 +362,15 @@ export const Invoker = ({
     while (i--) {
       const { path, method, options, key } = routes[Number(i)];
 
-      const joiner = join(basePath as string, path as string).replace(
+      const _basePath = basePath?.split(" ").join("/") ?? "/";
+      const _path = path?.split(" ").join("/") ?? "/";
+
+      let joiner = join("/", _basePath as string, _path as string).replace(
         /\\/g,
         "/"
       );
+      
+      joiner = joiner.replace(/\/:|:/g, "/:");
 
       APP[`${method}`](
         joiner,
