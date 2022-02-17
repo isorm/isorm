@@ -322,9 +322,13 @@ export const Invoker = ({
       if (!classValidator) return next();
       try {
         const validator = await new classValidator();
-        const result = validator?.validateBody(req?.body);
-        validator?.validateParam(req?.params);
-        if (result?.body) req.body = result?.body;
+        if (req?.params && validator?.validateParam)
+          await validator?.validateParam(req?.params);
+        const result = await validator?.validateBody(req?.body);
+        if (result?.body) {
+          // eslint-disable-next-line require-atomic-updates
+          req.body = result?.body;
+        }
         return next();
       } catch (e) {
         return res.json(e);
