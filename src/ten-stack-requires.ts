@@ -8,6 +8,7 @@ import express, {
 } from "express";
 import bodyParser, { OptionsJson, OptionsUrlencoded } from "body-parser";
 import APP from "./appGlobal";
+import { join } from "path";
 
 export type RequestOption = Partial<{
   validator: new () => any;
@@ -281,18 +282,58 @@ export const Middleware = (...middleware: MiddlewareType[]) => {
   };
 };
 
+const defaultParser = {
+  urlencoded: {
+    extended: false,
+  },
+  json: {
+    limit: "300kb",
+  },
+};
+
+const statuslist = [
+  100, 101, 102, 103, 200, 201, 202, 203, 204, 205, 206, 207, 208, 226, 300,
+  301, 302, 303, 304, 305, 307, 308, 400, 401, 402, 403, 404, 405, 406, 407,
+  408, 409, 410, 411, 412, 413, 414, 415, 416, 417, 418, 421, 422, 423, 424,
+  425, 426, 428, 429, 431, 444, 451, 499, 500, 501, 502, 503, 504, 505, 506,
+  507, 508, 510, 511, 599,
+];
+
+const validate =
+  (classValidator: any) =>
+  async (req: Request, res: Response, next: NextFunction) => {
+    if (!classValidator) return next();
+    try {
+      const validator = await new classValidator();
+      if (req?.params && validator?.validateParam)
+        await validator?.validateParam(req?.params);
+      const result = await validator?.validateBody(req?.body);
+      if (result?.body) {
+        // eslint-disable-next-line require-atomic-updates
+        req.body = result?.body;
+      }
+      return next();
+    } catch (e) {
+      return res.json(e);
+    }
+  };
+
+const NextHandler = (
+  err: any,
+  _req: Request,
+  res: Response,
+  _next: NextFunction
+) => {
+  return res
+    .status(statuslist.includes(err.status) ? err.status : 400)
+    .json(err);
+};
+
 export const Invoker = ({
   middlewares,
   playground,
   options = {
-    parser: {
-      urlencoded: {
-        extended: false,
-      },
-      json: {
-        limit: "300kb",
-      },
-    },
+    parser: defaultParser,
   },
 }: {
   controllers?: object[];
@@ -316,39 +357,24 @@ export const Invoker = ({
     APP.use(middlewares);
   }
 
-  const validate =
-    (classValidator: any) =>
-    async (req: Request, res: Response, next: NextFunction) => {
-      if (!classValidator) return next();
-      try {
-        const validator = await new classValidator();
-        if (req?.params && validator?.validateParam)
-          await validator?.validateParam(req?.params);
-        const result = await validator?.validateBody(req?.body);
-        if (result?.body) {
-          // eslint-disable-next-line require-atomic-updates
-          req.body = result?.body;
-        }
-        return next();
-      } catch (e) {
-        return res.json(e);
-      }
-    };
-
   globalThis._$.map(({ routes, middlewares, controller, basePath }) => {
     if (middlewares && middlewares.length > 0) APP.use(middlewares);
 
-    let i = 0;
-    while (i < routes.length) {
+    let i = routes.length;
+    while (i--) {
       const { path, method, options, key } = routes[Number(i)];
 
-      APP[`${method}`](
-        `${basePath}/${path}`,
-        validate(options?.validator),
-        (...data: any[]) => controller[`${key}`](...data)
+      const joiner = join(basePath as string, path as string).replace(
+        /\\/g,
+        "/"
       );
 
-      i++;
+      APP[`${method}`](
+        joiner,
+        validate(options?.validator),
+        (...data: any[]) => controller[`${key}`](...data),
+        NextHandler
+      );
     }
 
     return null;
@@ -356,13 +382,3 @@ export const Invoker = ({
 
   return APP;
 };
-
-export class InjectValidator {
-  validateBody?(value: any): any {
-    return null;
-  }
-
-  validateParam?(value: any): any {
-    return null;
-  }
-}
