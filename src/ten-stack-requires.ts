@@ -37,14 +37,14 @@ declare global {
   }[];
 }
 
-export type Req<T> = {
+export type RequestType<T> = {
   [key: string]: any;
   atc?: object;
 } & Request & {
     [K in keyof T]: T[K];
   };
 
-export type Res<T> = {
+export type ResponseType<T> = {
   [key: string]: any;
 } & Response & {
     [K in keyof T]: T[K];
@@ -65,14 +65,14 @@ export interface Next<T> {
 export type TRoute = { path: string; route: Router };
 
 export type TMiddleware<T extends any> = (
-  req: Req<T>,
-  res: Res<T>,
+  req: RequestType<T>,
+  res: ResponseType<T>,
   next: NextFunction
 ) => NextFunction | void;
 
 export type TAttach<T> = (
-  req: Req<T>,
-  res: Res<T>,
+  req: RequestType<T>,
+  res: ResponseType<T>,
   next: NextFunction
 ) => Response | NextFunction | void | Promise<any>;
 
@@ -93,7 +93,7 @@ export const routes = (app: Express, routes: TRoute[]) =>
     return app.use(
       item.path,
       _attacher(item.route),
-      (err: any, _req: Req<{}>, res: Response, _next: Next<any>) => {
+      (err: any, _req: RequestType<{}>, res: Response, _next: Next<any>) => {
         return res.json(err);
       }
     );
@@ -417,53 +417,60 @@ export const Invoker = ({
     APP.use(middlewares);
   }
 
-  globalThis._$.map(({ routes, middlewares, target, controller, basePath }) => {
-    if (middlewares && middlewares.length > 0) APP.use(middlewares);
+  globalThis._$.map(
+    ({ routes, middlewares, controller, basePath, ...some }) => {
+      if (middlewares && middlewares.length > 0) APP.use(middlewares);
 
-    let i = routes.length;
-    while (i--) {
-      const { path, method, options, key } = routes[Number(i)];
+      let i = routes.length;
+      while (i--) {
+        const { path, method, options, key } = routes[Number(i)];
 
-      const routeMetadata = Reflect.getOwnMetadata(
-        METADATA_PROP_INDEX,
-        target,
-        key
-      );
+        const routeMetadata = Reflect.getOwnMetadata(
+          METADATA_PROP_INDEX,
+          some?.target,
+          key
+        );
 
-      const normalize = (path: string) => path.split(" ").join("/") ?? "/";
+        const normalize = (path: string) => path.split(" ").join("/") ?? "/";
 
-      const _basePath = normalize(basePath as string);
-      const _path = normalize(path as string);
+        const _basePath = normalize(basePath as string);
+        const _path = normalize(path as string);
 
-      let endpoint = join("/", _basePath, _path).replace(/\\/g, "/");
+        let endpoint = join("/", _basePath, _path).replace(/\\/g, "/");
 
-      endpoint = endpoint.replace(/\/:|:/g, "/:");
+        endpoint = endpoint.replace(/\/:|:/g, "/:");
 
-      APP[`${method}`](
-        endpoint,
-        validate(options?.validator),
-        (req: Request, res: Response, next: NextFunction) => {
-          const metadata = routeMetadata[0];
+        APP[`${method}`]?.(
+          endpoint,
+          validate(options?.validator),
+          (req: Request, res: Response, next: NextFunction) => {
+            const metadata = routeMetadata[0];
 
-          metadata.props = metadata.props.map((item: any) => {
-            if (item.methodName === key) {
-              if (item.title.shortName === "req") item.attach = req;
-              else if (item.title.shortName === "res") item.attach = res;
-              else if (item.title.shortName === "nex") item.attach = next;
-            }
-            return item;
-          });
+            metadata.props = metadata.props.map((item: any) => {
+              if (item.methodName === key) {
+                if (item.title.shortName === "req") item.attach = req;
+                else if (item.title.shortName === "res") item.attach = res;
+                else if (item.title.shortName === "nex") item.attach = next;
+              }
+              return item;
+            });
 
-          Reflect.defineMetadata(METADATA_PROP_INDEX, [metadata], target, key);
-          next();
-        },
-        (...data: any[]) => controller[`${key}`](...data),
-        NextHandler
-      );
+            Reflect.defineMetadata(
+              METADATA_PROP_INDEX,
+              [metadata],
+              some?.target,
+              key
+            );
+            next();
+          },
+          (...data: any[]) => controller[`${key}`](...data),
+          NextHandler
+        );
+      }
+
+      return null;
     }
-
-    return null;
-  });
+  );
 
   return APP;
 };
