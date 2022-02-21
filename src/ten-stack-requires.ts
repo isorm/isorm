@@ -10,6 +10,8 @@ import bodyParser, { OptionsJson, OptionsUrlencoded } from "body-parser";
 import APP from "./appGlobal";
 import { join } from "path";
 
+const METADATA_PROP_INDEX = Symbol("METADATA_PROP_INDEX");
+
 export type RequestOption = Partial<{
   validator: new () => any;
 }>;
@@ -22,6 +24,7 @@ declare global {
     name: string;
     controller?: any;
     basePath?: string;
+    target?: any;
     routes: {
       options?: RequestOption & {
         [key: string]: any;
@@ -156,28 +159,56 @@ export const Implementer = (
   return app;
 };
 
-export function Injectable() {
-  return function <T>(target: { new (...args: any[]): T }) {
-    Reflect.getMetadata("design:paramtypes", target);
-  };
-}
-
 export class Container {
-  private static container = new Map<string, any>();
+  private static INJECT_CLASS = new Map();
+  private static INJECT_LIST = Symbol("INJECT_LIST");
 
-  static resolve<T>(target: { new (...args: any[]): T }): T {
-    if (Container.container.has(target.name)) {
-      return Container.container.get(target.name);
-    }
-    const tokens = Reflect.getMetadata("design:paramtypes", target) || [];
-    const injections = tokens.map((token: { new (...args: any[]): T }): any =>
-      Container.resolve(token)
-    );
-    const instance = new target(...injections);
-    Container.container.set(target.name, instance);
+  static resolve<T extends { [key: string]: any }>(target: {
+    new (...args: any[]): T;
+  }): T {
+    const targetClass = Reflect.getOwnMetadata(this.INJECT_LIST, target) || [];
+    const injectlist = targetClass
+      .sort((a: any, b: any) => {
+        return a.index - b.index;
+      })
+      .map((item: any) => {
+        return item.inject;
+      });
+
+    const instance = new target(...injectlist);
+
+    this.INJECT_CLASS.set(instance, instance);
+
     return instance;
   }
+
+  static realClass = (target: any) => {
+    const cls = Container.resolve(target.constructor);
+    const instance = this.INJECT_CLASS.get(cls);
+    return instance;
+  };
+
+  static Inject(value: any) {
+    return (target: any, key: PropertyKey, paramIndex: number) => {
+      const injects: any[] =
+        Reflect.getOwnMetadata(this.INJECT_LIST, target) || [];
+
+      injects.push({
+        key: "constructor",
+        index: paramIndex,
+        constructorName: target.name,
+        name: value.name,
+        inject: Container.resolve(value),
+      });
+
+      Reflect.defineMetadata(this.INJECT_LIST, injects, target);
+    };
+  }
 }
+
+export const Inject = (value: any) => Container.Inject(value);
+export const Resolve = (target: any) => Container.resolve(target);
+export const RealClass = (target: any) => Container.resolve(target);
 
 export const Controller = (_path: string) => {
   return (target: any) => {
@@ -205,10 +236,22 @@ function HandleRequestDecorator({
   path: string;
 }) {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  return (target: any, propKey: string, _descriptor: PropertyDescriptor) => {
+  return (target: any, propKey: string, descriptor: PropertyDescriptor) => {
+    const method = descriptor.value;
+
+    const classMetadata = Reflect.getOwnMetadata(
+      METADATA_PROP_INDEX,
+      target,
+      propKey
+    )[0];
+
     const index = globalThis._$.findIndex(
-      (item) => item?.name === target?.constructor?.name
+      (item) => item.name === classMetadata.constructorName
     );
+
+    if (!globalThis._$[Number(index)]?.target) {
+      globalThis._$[Number(index)].target = target;
+    }
 
     const route = {
       options,
@@ -226,6 +269,19 @@ function HandleRequestDecorator({
       };
       globalThis._$.push(temp);
     } else globalThis._$[Number(index)].routes.push(route);
+
+    descriptor.value = (...data: any[]) => {
+      const instance = Container.realClass(target);
+      let i: string;
+      for (i in classMetadata.props) {
+        const item = classMetadata.props[`${i}`];
+        const index = data.findIndex((_, index) => index === item.index);
+        if (index === -1) continue;
+        data[Number(index)] = item.attach;
+      }
+
+      return method.apply(instance, data);
+    };
   };
 }
 
@@ -355,26 +411,46 @@ export const Invoker = ({
     APP.use(middlewares);
   }
 
-  globalThis._$.map(({ routes, middlewares, controller, basePath }) => {
+  globalThis._$.map(({ routes, middlewares, target, controller, basePath }) => {
     if (middlewares && middlewares.length > 0) APP.use(middlewares);
 
     let i = routes.length;
     while (i--) {
       const { path, method, options, key } = routes[Number(i)];
 
-      const _basePath = basePath?.split(" ").join("/") ?? "/";
-      const _path = path?.split(" ").join("/") ?? "/";
-
-      let joiner = join("/", _basePath as string, _path as string).replace(
-        /\\/g,
-        "/"
+      const routeMetadata = Reflect.getOwnMetadata(
+        METADATA_PROP_INDEX,
+        target,
+        key
       );
-      
-      joiner = joiner.replace(/\/:|:/g, "/:");
+
+      const normalize = (path: string) => path.split(" ").join("/") ?? "/";
+
+      const _basePath = normalize(basePath as string);
+      const _path = normalize(path as string);
+
+      let endpoint = join("/", _basePath, _path).replace(/\\/g, "/");
+
+      endpoint = endpoint.replace(/\/:|:/g, "/:");
 
       APP[`${method}`](
-        joiner,
+        endpoint,
         validate(options?.validator),
+        (req: Request, res: Response, next: NextFunction) => {
+          const metadata = routeMetadata[0];
+
+          metadata.props = metadata.props.map((item: any) => {
+            if (item.methodName === key) {
+              if (item.title.shortName === "req") item.attach = req;
+              else if (item.title.shortName === "res") item.attach = res;
+              else if (item.title.shortName === "nex") item.attach = next;
+            }
+            return item;
+          });
+
+          Reflect.defineMetadata(METADATA_PROP_INDEX, [metadata], target, key);
+          next();
+        },
         (...data: any[]) => controller[`${key}`](...data),
         NextHandler
       );
@@ -384,4 +460,78 @@ export const Invoker = ({
   });
 
   return APP;
+};
+
+const PropDefiner = ({
+  name,
+  shortName,
+  target,
+  key,
+  propIndex,
+}: {
+  propIndex: number;
+  target: any;
+  key: string;
+  shortName: string;
+  name: string;
+}) => {
+  type TPropContainer = {
+    index: number;
+    title: {
+      shortName: string;
+      name: string;
+    };
+    methodName: string;
+  };
+
+  type TNewContainer = {
+    constructor: any;
+    constructorName: any;
+    props: TPropContainer[];
+  };
+
+  const propContainers: TNewContainer[] =
+    Reflect.getOwnMetadata(METADATA_PROP_INDEX, target, key) || [];
+
+  const newContainer: TNewContainer = {
+    constructor: target.constructor,
+    constructorName: target.constructor.name,
+    props: [],
+  };
+
+  const propOfContainer: TPropContainer = {
+    index: propIndex,
+    methodName: key,
+    title: { name, shortName },
+  };
+
+  const index = propContainers.findIndex(
+    (item: { [key: string]: any }) =>
+      item.constructorName === target.constructor.name
+  );
+
+  if (index === -1) {
+    newContainer.props.push(propOfContainer);
+    propContainers.push(newContainer);
+  } else propContainers[Number(index)].props.push(propOfContainer);
+
+  Reflect.defineMetadata(METADATA_PROP_INDEX, propContainers, target, key);
+};
+
+export const Req = (target: any, key: string, propIndex: number) => {
+  PropDefiner({ target, key, propIndex, name: "request", shortName: "req" });
+};
+
+export const Res = (target: any, key: string, propIndex: number) => {
+  PropDefiner({ target, key, propIndex, name: "response", shortName: "res" });
+};
+
+export const Nex = (target: any, key: string, propIndex: number) => {
+  PropDefiner({
+    target,
+    key,
+    propIndex,
+    name: "next",
+    shortName: "nex",
+  });
 };
