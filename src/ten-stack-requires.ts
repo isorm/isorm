@@ -24,7 +24,7 @@ declare global {
     name: string;
     controller?: any;
     basePath?: string;
-    target?: any;
+    target: any;
     routes: {
       options?: RequestOption & {
         [key: string]: any;
@@ -235,23 +235,20 @@ function HandleRequestDecorator({
   options?: RequestOption;
   path: string;
 }) {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   return (target: any, propKey: string, descriptor: PropertyDescriptor) => {
-    const method = descriptor.value;
+    const mtd = descriptor.value;
 
-    const classMetadata = Reflect.getOwnMetadata(
+    let classMetadata = Reflect.getOwnMetadata(
       METADATA_PROP_INDEX,
       target,
       propKey
-    )[0];
-
-    const index = globalThis._$.findIndex(
-      (item) => item.name === classMetadata.constructorName
     );
 
-    if (!globalThis._$[Number(index)]?.target) {
-      globalThis._$[Number(index)].target = target;
-    }
+    if (!classMetadata) return;
+    classMetadata = classMetadata[0];
+    const classIndex = globalThis._$.findIndex(
+      (item: any) => item.name === target.constructor.name
+    );
 
     const route = {
       options,
@@ -260,15 +257,24 @@ function HandleRequestDecorator({
       method,
     };
 
-    if (index === -1) {
+    if (classIndex === -1) {
       const temp = {
         middlewares: [],
         name: target.constructor.name,
         basePath: "/",
+        target,
         routes: [route],
       };
       globalThis._$.push(temp);
-    } else globalThis._$[Number(index)].routes.push(route);
+    } else globalThis._$[Number(classIndex)].routes.push(route);
+
+    const index = globalThis._$.findIndex(
+      (item) => item.name === classMetadata.constructorName
+    );
+
+    if (!globalThis._$[Number(index)]?.target) {
+      globalThis._$[Number(index)].target = target;
+    }
 
     descriptor.value = (...data: any[]) => {
       const instance = Container.realClass(target);
@@ -280,7 +286,7 @@ function HandleRequestDecorator({
         data[Number(index)] = item.attach;
       }
 
-      return method.apply(instance, data);
+      return mtd.apply(instance, data);
     };
   };
 }
