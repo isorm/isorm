@@ -1,18 +1,20 @@
-import { MetadataKeys } from "./MetadataKeys";
+import { METADATA_PROP_INDEX } from "../metadata";
 
-export function UtilityDecoratorDefiner({
+export const PropDefiner = ({
   name,
   shortName,
   target,
   key,
   propIndex,
+  args = [],
 }: {
   propIndex: number;
   target: any;
   key: string;
   shortName: string;
   name: string;
-}) {
+  args?: any[];
+}) => {
   type TPropContainer = {
     index: number;
     title: {
@@ -20,6 +22,7 @@ export function UtilityDecoratorDefiner({
       name: string;
     };
     methodName: string;
+    args?: any[];
   };
 
   type TNewContainer = {
@@ -29,7 +32,7 @@ export function UtilityDecoratorDefiner({
   };
 
   const propContainers: TNewContainer[] =
-    Reflect.getOwnMetadata(MetadataKeys.METADATA_PROP_INDEX, target, key) || [];
+    Reflect.getOwnMetadata(METADATA_PROP_INDEX, target, key) || [];
 
   const newContainer: TNewContainer = {
     constructor: target.constructor,
@@ -41,11 +44,12 @@ export function UtilityDecoratorDefiner({
     index: propIndex,
     methodName: key,
     title: { name, shortName },
+    args,
   };
 
   const index = propContainers.findIndex(
     (item: { [key: string]: any }) =>
-      item.constructorName === target.constructor.name
+      item.constructorName === target.constructor.name,
   );
 
   if (index === -1) {
@@ -53,10 +57,5 @@ export function UtilityDecoratorDefiner({
     propContainers.push(newContainer);
   } else propContainers[Number(index)].props.push(propOfContainer);
 
-  Reflect.defineMetadata(
-    MetadataKeys.METADATA_PROP_INDEX,
-    propContainers,
-    target,
-    key
-  );
-}
+  Reflect.defineMetadata(METADATA_PROP_INDEX, propContainers, target, key);
+};

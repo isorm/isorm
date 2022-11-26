@@ -1,7 +1,7 @@
+import { Request } from 'express';
 import axios from "axios";
-import { Request } from "express";
 
-export async function detectIp(req: Request, geo: boolean) {
+export async function ipDetector(req: Request, geo: boolean) {
   let IP = { ip: req.socket.remoteAddress };
   if (IP.ip?.includes("::1") || (IP.ip?.includes("127.0.0.1") && geo)) {
     const serviceEndpoint = "https://api.ipify.org/?format=json";

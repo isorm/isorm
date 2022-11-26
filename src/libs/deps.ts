@@ -43,8 +43,10 @@ export class Container {
       Reflect.defineMetadata(this.INJECT_LIST, injects, target);
     };
   }
+
+  static Injectable(target: any) {
+    
+  }
 }
 
 export const Inject = (value: any) => Container.Inject(value);
-export const Resolve = (target: any) => Container.resolve(target);
-export const RealClass = (target: any) => Container.resolve(target);

@@ -9,7 +9,10 @@ export const validator =
       if (req?.params && validator?.validateParam)
         await validator?.validateParam(req?.params);
       const result = await validator?.validateBody(req?.body);
-      if (result?.body) req.body = result?.body;
+      if (result?.body) {
+        // eslint-disable-next-line require-atomic-updates
+        req.body = result?.body;
+      }
       return next();
     } catch (e) {
       return res.json(e);
